@@ -3,25 +3,33 @@
 This guide will walk you through the steps to integrate DeepSeek into AI Assistant as a third-party provider into PyCharm 2024.3.1 (Professional Edition).
 
 ## Prerequisites
-- Ensure you have the necessary API key from DeepSeek.
+- Ensure you have the necessary API key from DeepSeek
+- Python knowledge
 
 ## Steps to Integrate
-
-1. **Create a Run Configuration for `fake_ollama_server.py`**
+1. **Setup repository**
+    - Clone
+    - Create virtual environment
+    - Install `requirements.py`
+2. **Create a Run Configuration for `fake_ollama_server.py`**
     - Open your project in PyCharm.
     - Navigate to `Run > Edit Configurations`.
     - Add a new configuration for `fake_ollama_server.py`.
 
-2. **Add Your API Key to the Environment**
+3. **Add Your API Key to the Environment**
     - In the run configuration, go to the `Environment variables` section.
     - Add your DeepSeek API key as an environment variable.
 
-3. **Configure Third-Party AI Providers**
+4. **Configure Third-Party AI Providers**
     - Go to `Tools > AI Assistant > Third-party AI providers`.
     - AI Assistant will automatically detect the server (approximately every minute).
 
-4. **Select the Model**
+5. **Select the Model**
     - Once the server is detected, you can choose the DeepSeek model from the available options.
+
+5. **Use selected Model by entering a user prompt**
+
+![](./HowTo.gif)
 
 ## Screenshots
 
