@@ -1,6 +1,6 @@
 # How to Integrate DeepSeek into AI Assistant as a Third-Party Provider
-
 This guide will walk you through the steps to integrate DeepSeek V3 into AI Assistant as a third-party provider into PyCharm 2024.3.1 (Professional Edition).
+Data is routed through a fake OLLAMA server to DeepSeek.
 
 ## Prerequisites
 - Ensure you have the necessary API key from DeepSeek
