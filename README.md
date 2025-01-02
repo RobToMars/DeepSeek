@@ -44,6 +44,7 @@ This guide will walk you through the steps to integrate DeepSeek into AI Assista
 - If the server is not detected, restart the server and check the environment variables.
 
 ## Links
+- [PyCharm AI Assistant](https://www.jetbrains.com/help/pycharm/ai-assistant.html)
 - [DeepSeek Chat](https://chat.deepseek.com/)
 - [DeepSeek API Docs](https://api-docs.deepseek.com/)
 - [OLLAMA GitHub](https://github.com/ollama/ollama)
