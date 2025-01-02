@@ -35,6 +35,11 @@ This guide will walk you through the steps to integrate DeepSeek into AI Assista
 - Ensure the `fake_ollama_server.py` is running before proceeding with the integration.
 - If the server is not detected, restart the server and check the environment variables.
 
+## Links
+- [DeepSeek Chat](https://chat.deepseek.com/)
+- [DeepSeek API Docs](https://api-docs.deepseek.com/)
+- [OLLAMA GitHub](https://github.com/ollama/ollama)
+
 ## Credits
 - DeepSeek V3
   - With system prompts of AI Assistant of PyCharm 2024.3.1 (Professional Edition) and the web chat edition
