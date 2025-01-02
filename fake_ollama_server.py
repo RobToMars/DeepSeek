@@ -18,7 +18,7 @@ import uvicorn
 logging.basicConfig(level=logging.INFO)
 app = FastAPI()
 
-OLLAMA_ADDRESS = os.getenv("OLLAMA_ADDRESS", "0.0.0.0")
+OLLAMA_ADDRESS = os.getenv("OLLAMA_ADDRESS", "127.0.0.1")
 OLLAMA_PORT = int(os.getenv("OLLAMA_PORT", "11434"))
 
 API_URL = os.getenv("API_URL", "https://api.deepseek.com/v1/chat/completions")
