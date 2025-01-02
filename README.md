@@ -10,11 +10,11 @@ This guide will walk you through the steps to integrate DeepSeek into AI Assista
 1. **Setup repository**
     - Clone
     - Create virtual environment
-    - Install `requirements.py`
+    - Install [requirements.txt](requirements.txt)
 2. **Create a Run Configuration for `fake_ollama_server.py`**
     - Open your project in PyCharm.
     - Navigate to `Run > Edit Configurations`.
-    - Add a new configuration for `fake_ollama_server.py`.
+    - Add a new configuration for [fake_ollama_server.py](fake_ollama_server.py).
 
 3. **Add Your API Key to the Environment**
     - In the run configuration, go to the `Environment variables` section.
@@ -29,18 +29,18 @@ This guide will walk you through the steps to integrate DeepSeek into AI Assista
 
 5. **Use selected Model by entering a user prompt**
 
-![](./HowTo.gif)
+![](resources/HowTo.gif)
 
 ## Screenshots
 
 - **Third-Party AI Providers Configuration**  
-  ![](./Tools-AI_Assistant_Third-party_AI_providers.png)
+  ![](resources/Tools-AI_Assistant_Third-party_AI_providers.png)
 
 - **AI Assistant Chat Interface**  
-  ![](./AI_Assistant_Chat.png)
+  ![](resources/AI_Assistant_Chat.png)
 
 ## Notes
-- Ensure the `fake_ollama_server.py` is running before proceeding with the integration.
+- Ensure the [fake_ollama_server.py](fake_ollama_server.py) is running before proceeding with the integration.
 - If the server is not detected, restart the server and check the environment variables.
 
 ## Links
