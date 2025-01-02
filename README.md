@@ -48,8 +48,13 @@ This guide will walk you through the steps to integrate DeepSeek V3 into AI Assi
 - [DeepSeek Chat](https://chat.deepseek.com/)
 - [DeepSeek API Docs](https://api-docs.deepseek.com/)
 - [OLLAMA GitHub](https://github.com/ollama/ollama)
+- 
+## Join the Community
+We welcome contributions and feedback! If you have any suggestions or run into issues, please open an [issue](https://github.com/RobToMars/DeepSeek/issues) or submit a [pull request](https://github.com/RobToMars/DeepSeek/pulls).
 
-## Credits
+Let’s make this integration even better together!
+
+### Credits
 - DeepSeek V3
   - With system prompts of AI Assistant of PyCharm 2024.3.1 (Professional Edition) and the web chat edition
 - RobToMars
