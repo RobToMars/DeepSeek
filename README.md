@@ -15,7 +15,7 @@ This guide provides step-by-step instructions to integrate **DeepSeek V3** into 
 ### Using Docker
 Run the following command to start the server:
 ```bash
-docker run -e API_KEY=your_api_key_here -p 11434:11434 my-python-app
+docker run -e API_KEY=your_api_key_here -p 11434:11434 fake-ollama-server
 ```
 
 ### Using Python
