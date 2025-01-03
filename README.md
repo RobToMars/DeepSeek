@@ -1,6 +1,6 @@
 # DeepSeek Integration Guide for AI Assistant in PyCharm
 
-This guide provides step-by-step instructions to integrate **DeepSeek V3** into **AI Assistant** as a third-party provider in **PyCharm 2024.3.1 (Professional Edition)**. Data is routed through a fake OLLAMA server to DeepSeek.
+This guide provides step-by-step instructions to integrate **DeepSeek V3** into **AI Assistant** as a third-party provider in **PyCharm 2024.3.1 (Professional Edition)**. Data is routed through a fake Ollama server to DeepSeek.
 
 ---
 
@@ -10,10 +10,10 @@ This guide provides step-by-step instructions to integrate **DeepSeek V3** into 
 
 ---
 
-## Setting Up the Fake OLLAMA Server
+## Setting Up the Fake Ollama Server
 
 ### Using Docker
-Run the following command from project to build, remove previous container and start the docker container fake OLLAMA server:
+To build and run the docker container, replace `your_api_key_here` with your DeepSeek API key:
 ```bash
 docker build -t fake-ollama-server . && docker run --rm -e API_KEY=your_api_key_here -p 11434:11434 fake-ollama-server
 ```
@@ -28,7 +28,7 @@ docker build -t fake-ollama-server . && docker run --rm -e API_KEY=your_api_key_
     - Open your project in PyCharm.
     - Navigate to `Run > Edit Configurations`.
     - Add a new configuration for `fake_ollama_server.py`.
-    - Add your DeepSeek API key as an environment variable in the run configuration.
+    - Add your DeepSeek API key as `API_KEY` environment variable in the run configuration.
 
 ---
 
@@ -36,7 +36,9 @@ docker build -t fake-ollama-server . && docker run --rm -e API_KEY=your_api_key_
 
 1. **Add Third-Party AI Provider**:
     - Go to `Tools > AI Assistant > Third-party AI providers`.
-    - AI Assistant will automatically detect the server (approximately every minute).
+    - Check `Enable Ollama` and update `URL` if changed.
+    - Use `Test connection` and `Apply` settings.
+    - AI Assistant will automatically detect the server (approximately every minute) otherwise disable/enable it.
 
 2. **Select the Model**:
     - Once the server is detected, choose the DeepSeek model from the available options.
@@ -71,7 +73,7 @@ docker build -t fake-ollama-server . && docker run --rm -e API_KEY=your_api_key_
 - [PyCharm AI Assistant Documentation](https://www.jetbrains.com/help/pycharm/ai-assistant.html)
 - [DeepSeek Chat](https://chat.deepseek.com/)
 - [DeepSeek API Documentation](https://api-docs.deepseek.com/)
-- [OLLAMA GitHub Repository](https://github.com/ollama/ollama)
+- [Ollama GitHub Repository](https://github.com/ollama/ollama)
 
 ---
 
