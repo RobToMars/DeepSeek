@@ -13,9 +13,9 @@ This guide provides step-by-step instructions to integrate **DeepSeek V3** into 
 ## Setting Up the Fake OLLAMA Server
 
 ### Using Docker
-Run the following command to start the server:
+Run the following command from project to build, remove previous container and start the docker container fake OLLAMA server:
 ```bash
-docker run -e API_KEY=your_api_key_here -p 11434:11434 fake-ollama-server
+docker build -t fake-ollama-server . && docker run -rm -e API_KEY=your_api_key_here -p 11434:11434 fake-ollama-server
 ```
 
 ### Using Python
