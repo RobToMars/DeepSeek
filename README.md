@@ -13,9 +13,9 @@ This guide provides step-by-step instructions to integrate **DeepSeek V3** into 
 ## Setting Up the Fake Ollama Server
 
 ### Using Docker
-To build and run the docker container, replace `your_api_key_here` with your DeepSeek API key:
+To run the docker container, replace `your_api_key_here` with your DeepSeek API key:
 ```bash
-docker build -t fake-ollama-server . && docker run --rm -e API_KEY=your_api_key_here -p 11434:11434 fake-ollama-server
+docker run --rm -e API_KEY=your_api_key_here -p 11434:11434 ghcr.io/RobToMars/deepseek
 ```
 
 ### Using Python
