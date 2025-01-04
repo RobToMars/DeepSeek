@@ -15,7 +15,7 @@ This guide provides step-by-step instructions to integrate **DeepSeek V3** into 
 ### Using Docker
 To run the docker container, replace `your_api_key_here` with your DeepSeek API key:
 ```bash
-docker run --rm -e API_KEY=your_api_key_here -p 11434:11434 ghcr.io/RobToMars/deepseek
+docker run --rm -e API_KEY=your_api_key_here -p 11434:11434 ghcr.io/robtomars/deepseek
 ```
 
 ### Using Python
@@ -90,6 +90,7 @@ Let’s improve this integration together!
 - **DeepSeek V3**: With system prompts of AI Assistant in PyCharm 2024.3.1 (Professional Edition) and the web chat edition.
 - [RobToMars](https://github.com/RobToMars)
 - [starkirby125918](https://github.com/starkirby125918)
+- [JasonLovesDoggo](https://github.com/JasonLovesDoggo)
 
 ---
 
