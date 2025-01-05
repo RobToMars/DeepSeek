@@ -212,8 +212,30 @@ async def chat(request: Request):
     stream = data.get("stream", False)
     if not messages:
         return JSONResponse(content={"error": "model and prompt are required"}, status_code=400)
-    request_payload = {"model": model, "messages": messages, "stream": stream}
-    headers = {"Authorization": f"Bearer {API_KEY}", "Content-Type": "application/json"}
+
+    request_payload = {
+        "model": model,
+        "messages": messages,
+        "stream": stream,
+        # TODO Additional parameters yet ignored and to be tested
+        # https://api-docs.deepseek.com/api/create-chat-completion
+        # "frequency_penalty": os.0,
+        # "max_tokens": 2048,
+        # "presence_penalty": 0,
+        # "response_format": {
+        #     "type": "text"
+        # },
+        # "stop": None,
+        # "stream_options": None,
+        # "temperature": 1,
+        # "top_p": 1,
+        # "tools": None,
+        # "tool_choice": "none",
+        # "logprobs": False,
+        # "top_logprobs": None,
+    }
+    logging.debug(json.dumps(request_payload, indent=2))
+    headers = {"Authorization": f"Bearer {API_KEY}", "Content-Type": JSON_MEDIA_TYPE}
     return (
         handle_streaming_response(request_payload, headers)
         if stream
@@ -244,7 +266,7 @@ async def get_tags():
     return {
         "models": [
             create_model_dict(MODEL_CHAT),
-            create_model_dict(MODEL_CODER),
+            # create_model_dict(MODEL_CODER),  # TODO Not supported
         ]
     }
 
