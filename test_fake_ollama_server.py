@@ -63,14 +63,6 @@ class TestFakeOllamaServer(unittest.TestCase):
             cls.server_process.kill()
             logging.warning("Had to forcefully kill server process")
 
-    @classmethod
-    def tearDownClass(cls):
-        """Stop the fake Ollama server after running tests."""
-        logging.info("Stopping fake Ollama server...")
-        cls.server_process.terminate()
-        cls.server_process.wait()
-        logging.info("Fake Ollama server stopped.")
-
     def test_chat_model_basic(self):
         """Test basic chat functionality with deepseek-chat."""
         payload = {
@@ -78,10 +70,12 @@ class TestFakeOllamaServer(unittest.TestCase):
             "messages": [{"role": "user", "content": "Hello, how are you?"}],
             "stream": False,
         }
+        logging.debug(f"Sending chat request: {json.dumps(payload, indent=2)}")
         response = requests.post(API_URL, json=payload)
         
         self.assertEqual(response.status_code, 200)
         data = response.json()
+        logging.debug(f"Received chat response: {json.dumps(data, indent=2)}")
         self.assertEqual(data["model"], MODEL_CHAT)
         self.assertTrue(data["done"])
         self.assertIn("content", data["message"])
@@ -94,15 +88,18 @@ class TestFakeOllamaServer(unittest.TestCase):
             "messages": [{"role": "user", "content": "What is 2 + 2?"}],
             "stream": False,
         }
+        logging.debug(f"Sending reasoner request: {json.dumps(payload, indent=2)}")
         response = requests.post(API_URL, json=payload)
         
         self.assertEqual(response.status_code, 200)
         data = response.json()
+        logging.debug(f"Received reasoner response: {json.dumps(data, indent=2)}")
         self.assertEqual(data["model"], MODEL_REASONER)
         self.assertTrue(data["done"])
         self.assertIn("content", data["message"])
-        # self.assertIn("reasoning_steps", data["message"])
-        # self.assertIsInstance(data["message"]["reasoning_steps"], list)
+        self.assertIn("reasoning_steps", data["message"])
+        self.assertIsInstance(data["message"]["reasoning_steps"], list)
+        self.assertGreater(len(data["message"]["reasoning_steps"]), 0)
 
     def test_streaming_chat(self):
         """Test streaming response with chat model."""
@@ -111,12 +108,14 @@ class TestFakeOllamaServer(unittest.TestCase):
             "messages": [{"role": "user", "content": "Tell me a story"}],
             "stream": True,
         }
+        logging.debug(f"Sending streaming chat request: {json.dumps(payload, indent=2)}")
         response = requests.post(API_URL, json=payload, stream=True)
         
         self.assertEqual(response.status_code, 200)
         for line in response.iter_lines():
             if line:
                 data = json.loads(line.decode('utf-8'))
+                logging.debug(f"Received streaming chat chunk: {json.dumps(data, indent=2)}")
                 self.assertIn("model", data)
                 self.assertIn("message", data)
                 self.assertIn("done", data)
@@ -128,12 +127,14 @@ class TestFakeOllamaServer(unittest.TestCase):
             "messages": [{"role": "user", "content": "Explain quantum computing"}],
             "stream": True,
         }
+        logging.debug(f"Sending streaming reasoner request: {json.dumps(payload, indent=2)}")
         response = requests.post(API_URL, json=payload, stream=True)
         
         self.assertEqual(response.status_code, 200)
         for line in response.iter_lines():
             if line:
                 data = json.loads(line.decode('utf-8'))
+                logging.debug(f"Received streaming reasoner chunk: {json.dumps(data, indent=2)}")
                 self.assertIn("model", data)
                 self.assertIn("message", data)
                 self.assertIn("done", data)
@@ -147,10 +148,12 @@ class TestFakeOllamaServer(unittest.TestCase):
             "messages": [{"role": "user", "content": "Hello"}],
             "stream": False,
         }
+        logging.debug(f"Sending invalid model request: {json.dumps(payload, indent=2)}")
         response = requests.post(API_URL, json=payload)
         
         self.assertEqual(response.status_code, 400)
         data = response.json()
+        logging.debug(f"Received invalid model response: {json.dumps(data, indent=2)}")
         self.assertIn("error", data)
 
     def test_missing_messages(self):
@@ -159,18 +162,22 @@ class TestFakeOllamaServer(unittest.TestCase):
             "model": MODEL_CHAT,
             "stream": False,
         }
+        logging.debug(f"Sending missing messages request: {json.dumps(payload, indent=2)}")
         response = requests.post(API_URL, json=payload)
         
         self.assertEqual(response.status_code, 400)
         data = response.json()
+        logging.debug(f"Received missing messages response: {json.dumps(data, indent=2)}")
         self.assertIn("error", data)
 
     def test_model_tags_endpoint(self):
         """Test the /api/tags endpoint."""
+        logging.debug("Requesting model tags")
         response = requests.get(f"http://{OLLAMA_ADDRESS}:{OLLAMA_PORT}/api/tags")
         
         self.assertEqual(response.status_code, 200)
         data = response.json()
+        logging.debug(f"Received model tags: {json.dumps(data, indent=2)}")
         self.assertIn("models", data)
         models = [m["name"] for m in data["models"]]
         self.assertIn(MODEL_CHAT, models)
