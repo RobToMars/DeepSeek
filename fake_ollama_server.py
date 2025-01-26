@@ -1,3 +1,4 @@
+# fake_ollama_server.py
 # -*- coding: UTF-8 -*-
 
 """ Fake Ollama Server for testing Ollama integration with Deepseek for PyCharm IDE """
@@ -6,6 +7,7 @@
 import os
 import json
 import logging
+import time
 
 # External Python libraries
 from fastapi import FastAPI, Request
@@ -17,12 +19,15 @@ import uvicorn
 
 logging.basicConfig(level=logging.INFO)
 app = FastAPI()
+start_time = time.time()
 
 OLLAMA_ADDRESS = os.getenv("OLLAMA_ADDRESS", "127.0.0.1")
 OLLAMA_PORT = int(os.getenv("OLLAMA_PORT", "11434"))
 
 API_URL = os.getenv("API_URL", "https://api.deepseek.com/v1/chat/completions")
-API_KEY = os.getenv("API_KEY", "YOUR_API_TOKEN")  # Retrieve the API key from the environment variable
+API_KEY = os.getenv("API_KEY")  # Retrieve the API key from the environment variable
+if not API_KEY:
+    raise ValueError("API_KEY environment variable is required")
 
 MODEL_CHAT = "deepseek-chat"
 MODEL_CODER = "deepseek-coder"
@@ -63,54 +68,111 @@ async def root():
     """
     return JSONResponse(content={"message": "Ollama is running"})
 
+@app.get("/health")
+async def health_check():
+    """
+    Health check endpoint for monitoring server status.
+    
+    Returns
+    -------
+    JSONResponse
+        Status information including server health and model availability.
+    """
+    return JSONResponse(content={
+        "status": "healthy",
+        "models": [MODEL_CHAT, MODEL_REASONER],
+        "uptime": time.time() - start_time
+    })
+
 
 def parse_response_line(line):
     """
-    Parses a single line of response from a specified format, extracting
-    details about a model's output, including message content, completion
-    status, and evaluation metrics if available.
+    Parses a single line of response, with special handling for deepseek-reasoner.
+    Extracts model output including content, completion status, and evaluation metrics.
 
     Args:
-        line (str): The line of response to parse, expected to follow a
-            predefined format.
+        line (str): The line of response to parse
 
     Returns:
-        dict or None: A dictionary containing parsed response data, including
-            the model name, assistant message content, completion status,
-            and optional evaluation metrics (token counts), or None if the
-            line does not conform to the expected format or contains errors.
-
-    Raises:
-        None explicitly. Logs errors if JSON decoding or data extraction
-        fails during processing.
+        dict or None: Parsed response data or None if invalid
     """
     try:
         if line == DONE_MARKER:
             return None
+            
         if line.startswith(DATA_PREFIX):
             response_data = json.loads(line[len(DATA_PREFIX) :])
-            if not isinstance(response_data, dict) or "choices" not in response_data:
+            
+            # Handle deepseek-reasoner specific format
+            if not isinstance(response_data, dict):
                 return None
-            choices = response_data["choices"]
-            if len(choices) == 0:
-                return None
-            choice = choices[0]
-            model = response_data["model"]
-            content = choice["delta"]["content"]
-            done = choice["finish_reason"] == "stop"
-            output = {
-                "model": model,
-                "message": {"role": "assistant", "content": content, "images": None},
-                "done": done,
-            }
+                
+            model = response_data.get("model", "")
+            is_reasoner = model == MODEL_REASONER
+            
+            # Handle both standard and reasoner response formats
+            if is_reasoner and "reasoning" in response_data:
+                content = response_data["reasoning"]["output"]
+                done = response_data["reasoning"]["complete"]
+            else:
+                if "choices" not in response_data:
+                    return None
+                choices = response_data["choices"]
+                if len(choices) == 0:
+                    return None
+                choice = choices[0]
+                content = choice["delta"]["content"]
+                done = choice["finish_reason"] == "stop"
+
+                # Format the response based on model type
+                message_content = {
+                    "role": "assistant",
+                    "content": content,
+                    "images": None
+                }
+                
+                if is_reasoner:
+                    # Parse reasoning steps from the content
+                    reasoning_steps = []
+                    if "reasoning" in response_data:
+                        # Extract steps from both content and reasoning fields
+                        content_steps = content.split("\n\n")
+                        reasoning_content = response_data["reasoning"].get("output", "")
+                        reasoning_content_steps = reasoning_content.split("\n\n")
+                        
+                        # Combine both sets of steps
+                        all_steps = content_steps + reasoning_content_steps
+                        
+                        # Format steps with proper numbering
+                        reasoning_steps = [
+                            {"step": i+1, "content": step.strip()}
+                            for i, step in enumerate(all_steps)
+                            if step.strip()
+                        ]
+                        
+                    message_content["reasoning_steps"] = reasoning_steps
+                    message_content["reasoning_content"] = reasoning_content if "reasoning" in response_data else None
+                
+                output = {
+                    "model": model,
+                    "message": message_content,
+                    "done": done,
+                }
+
             if done:
                 usage = response_data.get("usage", {})
                 eval_count = usage.get("total_tokens", 0)
                 prompt_eval_count = usage.get("prompt_tokens", 0)
-                output.update({"eval_count": eval_count, "prompt_eval_count": prompt_eval_count})
+                output.update({
+                    "eval_count": eval_count,
+                    "prompt_eval_count": prompt_eval_count,
+                    "reasoning_metrics": response_data.get("reasoning_metrics") if is_reasoner else None
+                })
+                
             return output
+            
     except (json.JSONDecodeError, KeyError) as e:
-        logging.error(f"Failed to decode JSON or extract data: {e}, line: {line}")
+        logging.error(f"Failed to parse response: {e}, line: {line}")
         return None
 
 
@@ -132,11 +194,15 @@ def generate_streaming_response(request_payload, headers):
         str: A JSON-formatted string containing the parsed response object for
              each received line.
     """
+    logging.debug(f"Sending request payload: {json.dumps(request_payload, indent=2)}")
     with requests.post(API_URL, headers=headers, json=request_payload, stream=True) as response:
         for line in response.iter_lines():
-            parsed_response = parse_response_line(line)
-            if parsed_response:
-                yield json.dumps(parsed_response) + "\n"
+            if line:
+                decoded_line = line.decode("utf-8")
+                logging.debug(f"Received streamed line: {decoded_line}")
+                parsed_response = parse_response_line(line)
+                if parsed_response:
+                    yield json.dumps(parsed_response) + "\n"
 
 
 def handle_streaming_response(request_payload, headers):
@@ -186,7 +252,9 @@ def handle_non_streaming_response(request_payload, headers):
         model = response_data["model"]
         return JSONResponse(content={"model": model, "message": message, "done": True})
     except requests.exceptions.HTTPError as http_err:
-        return JSONResponse(content={"error": f"HTTP error occurred: {http_err}"}, status_code=500)
+        # Return 400 for client errors, 500 for server errors
+        status_code = 400 if http_err.response.status_code < 500 else 500
+        return JSONResponse(content={"error": f"HTTP error occurred: {http_err}"}, status_code=status_code)
     except Exception as err:
         return JSONResponse(content={"error": f"An error occurred: {err}"}, status_code=500)
 
@@ -218,22 +286,20 @@ async def chat(request: Request):
         "model": model,
         "messages": messages,
         "stream": stream,
-        # TODO Additional parameters yet ignored and to be tested
-        # https://api-docs.deepseek.com/api/create-chat-completion
-        # "frequency_penalty": os.0,
-        # "max_tokens": 2048,
-        # "presence_penalty": 0,
-        # "response_format": {
-        #     "type": "text"
-        # },
-        # "stop": None,
-        # "stream_options": None,
-        # "temperature": 1,
-        # "top_p": 1,
-        # "tools": None,
-        # "tool_choice": "none",
-        # "logprobs": False,
-        # "top_logprobs": None,
+        "frequency_penalty": 0.5,
+        "max_tokens": 2048,
+        "presence_penalty": 0.5,
+        "temperature": 0.7,
+        "top_p": 0.9,
+        "response_format": {
+            "type": "text"
+        },
+        "stop": None,
+        "stream_options": None,
+        "tools": None,
+        "tool_choice": "none",
+        "logprobs": False,
+        "top_logprobs": None,
     }
     logging.debug(json.dumps(request_payload, indent=2))
     headers = {"Authorization": f"Bearer {API_KEY}", "Content-Type": JSON_MEDIA_TYPE}
