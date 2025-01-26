@@ -17,7 +17,12 @@ import uvicorn
 
 # Package Python libraries
 
-logging.basicConfig(level=logging.INFO)
+# Configure logging
+logging.basicConfig(
+    level=logging.DEBUG,
+    format="%(asctime)s - %(levelname)s - %(message)s",
+    handlers=[logging.StreamHandler()],
+)
 app = FastAPI()
 start_time = time.time()
 
@@ -106,53 +111,49 @@ def parse_response_line(line):
             # Handle deepseek-reasoner specific format
             if not isinstance(response_data, dict):
                 return None
+
+            logging.debug(f"Received reasoner response: {json.dumps(response_data, indent=2)}")
                 
             model = response_data.get("model", "")
             is_reasoner = model == MODEL_REASONER
-            
-            # Handle both standard and reasoner response formats
-            if is_reasoner and "reasoning" in response_data:
-                content = response_data["reasoning"]["output"]
-                done = response_data["reasoning"]["complete"]
-            else:
-                if "choices" not in response_data:
-                    return None
-                choices = response_data["choices"]
-                if len(choices) == 0:
-                    return None
-                choice = choices[0]
-                content = choice["delta"]["content"]
-                done = choice["finish_reason"] == "stop"
+            if "choices" not in response_data:
+                return None
+            choices = response_data["choices"]
+            if len(choices) == 0:
+                return None
+            choice = choices[0]
+            content = choice["delta"]["content"] or choice["delta"]["reasoning_content"]
+            done = choice["finish_reason"] == "stop"
 
-                # Format the response based on model type
-                message_content = {
-                    "role": "assistant",
-                    "content": content,
-                    "images": None
-                }
-                
-                if is_reasoner:
-                    # Parse reasoning steps from the content
-                    reasoning_steps = []
-                    if "reasoning" in response_data:
-                        # Extract steps from both content and reasoning fields
-                        content_steps = content.split("\n\n")
-                        reasoning_content = response_data["reasoning"].get("output", "")
-                        reasoning_content_steps = reasoning_content.split("\n\n")
-                        
-                        # Combine both sets of steps
-                        all_steps = content_steps + reasoning_content_steps
-                        
-                        # Format steps with proper numbering
-                        reasoning_steps = [
-                            {"step": i+1, "content": step.strip()}
-                            for i, step in enumerate(all_steps)
-                            if step.strip()
-                        ]
-                        
-                    message_content["reasoning_steps"] = reasoning_steps
-                    message_content["reasoning_content"] = reasoning_content if "reasoning" in response_data else None
-                
+            # Format the response based on model type
+            message_content = {
+                "role": "assistant",
+                "content": content,
+                "images": None
+            }
+
+            if is_reasoner:
+                # Parse reasoning steps from the content
+                reasoning_steps = []
+                if "reasoning" in response_data:
+                    # Extract steps from both content and reasoning fields
+                    content_steps = content.split("\n\n")
+                    reasoning_content = response_data["reasoning"].get("output", "")
+                    reasoning_content_steps = reasoning_content.split("\n\n")
+
+                    # Combine both sets of steps
+                    all_steps = content_steps + reasoning_content_steps
+
+                    # Format steps with proper numbering
+                    reasoning_steps = [
+                        {"step": i+1, "content": step.strip()}
+                        for i, step in enumerate(all_steps)
+                        if step.strip()
+                    ]
+
+                message_content["reasoning_steps"] = reasoning_steps
+                message_content["reasoning_content"] = reasoning_content if "reasoning" in response_data else None
+
                 output = {
                     "model": model,
                     "message": message_content,
@@ -163,11 +164,12 @@ def parse_response_line(line):
                 usage = response_data.get("usage", {})
                 eval_count = usage.get("total_tokens", 0)
                 prompt_eval_count = usage.get("prompt_tokens", 0)
-                output.update({
-                    "eval_count": eval_count,
-                    "prompt_eval_count": prompt_eval_count,
-                    "reasoning_metrics": response_data.get("reasoning_metrics") if is_reasoner else None
-                })
+                if False:
+                    output.update({
+                        "eval_count": eval_count,
+                        "prompt_eval_count": prompt_eval_count,
+                        "reasoning_metrics": response_data.get("reasoning_metrics") if is_reasoner else None
+                    })
                 
             return output
             
