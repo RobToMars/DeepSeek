@@ -26,6 +26,7 @@ API_KEY = os.getenv("API_KEY", "YOUR_API_TOKEN")  # Retrieve the API key from th
 
 MODEL_CHAT = "deepseek-chat"
 MODEL_CODER = "deepseek-coder"
+MODEL_REASONER = "deepseek-reasoner"
 MODEL_METADATA = {
     "modified_at": "2024-03-15T10:00:00Z",
     "size": 12000000000,
@@ -266,6 +267,7 @@ async def get_tags():
     return {
         "models": [
             create_model_dict(MODEL_CHAT),
+            create_model_dict(MODEL_REASONER),
             # create_model_dict(MODEL_CODER),  # TODO Not supported
         ]
     }
