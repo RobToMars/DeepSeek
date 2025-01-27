@@ -100,6 +100,9 @@ def validate_message_sequence(messages, model):
     if not messages:
         return {"error": "Empty message list", "code": "invalid_messages"}
 
+    if messages[0]["role"] != "user":
+        messages.pop(0)
+
     # First message must be from user
     if messages[0]["role"] != "user":
         return {"error": "First message must be from user", "code": "invalid_first_message"}
@@ -272,7 +275,7 @@ async def chat(request: Request):
 
     # Message sequence validation
     if validation_error := validate_message_sequence(messages, model):
-        logging.error(f"Message sequence validation error: {validation_error}")
+        logging.error(f"Message sequence validation error: {model}\n{validation_error}\n{messages}")
         return JSONResponse(
             content={
                 "error": f"Invalid message sequence: {validation_error['error']}",
