@@ -129,24 +129,39 @@ def validate_message_sequence(messages, model):
 
 def parse_response_line(line):
     """
-    Parses response lines while maintaining original format compatibility
-    Returns multiple chunks for large content blocks
+    Parses a single line of response from a specified format, extracting
+    details about a model's output, including message content, completion
+    status, and evaluation metrics if available.
+
+    Args:
+        line (str): The line of response to parse, expected to follow a
+            predefined format.
+
+    Returns:
+        dict or None: A dictionary containing parsed response data, including
+            the model name, assistant message content, completion status,
+            and optional evaluation metrics (token counts), or None if the
+            line does not conform to the expected format or contains errors.
+
+    Raises:
+        None explicitly. Logs errors if JSON decoding or data extraction
+        fails during processing.
     """
     try:
         if line == DONE_MARKER:
-            return []
+            return None
 
         if line.startswith(DATA_PREFIX):
             json_str = line[len(DATA_PREFIX):].decode('utf-8')
             response_data = json.loads(json_str)
 
             if not isinstance(response_data, dict):
-                return []
+                return None
 
             model = response_data.get("model", "")
             choices = response_data.get("choices", [])
             if not choices:
-                return []
+                return None
 
             choice = choices[0]
             delta = choice.get("delta", {})
@@ -171,32 +186,49 @@ def parse_response_line(line):
             if reasoning_steps:
                 message_content["reasoning_steps"] = reasoning_steps
 
-            return [{
+            output = {
                 "model": model,
-                "message": message_content,
-                "done": done
-            }]
+                "message": {"role": "assistant", "content": content, "images": None},
+                "done": done,
+            }
+            if done:
+                usage = response_data.get("usage", {})
+                eval_count = usage.get("total_tokens", 0)
+                prompt_eval_count = usage.get("prompt_tokens", 0)
+                output.update({"eval_count": eval_count, "prompt_eval_count": prompt_eval_count})
+            return output
 
-        return []
+        return None
     except Exception as e:
         logging.error(f"Error parsing line: {e}")
-        return []
+        return None
 
 
 def generate_streaming_response(api_endpoint, request_payload, headers):
     """
-    Generator that maintains original format while chunking responses
+    Generate a streaming response from a POST request to a specified API endpoint.
+
+    This function sends a POST request to the provided API URL using the specified
+    headers and request payload. It streams the response line by line, parses each
+    line received, and yields the parsed response in JSON format. The function
+    is designed for scenarios where data is continuously streamed from the server
+    and needs to be processed incrementally.
+
+    Args:
+        request_payload (dict): The JSON payload to be sent in the POST request.
+        headers (dict): The headers to be included in the POST request.
+
+    Yields:
+        str: A JSON-formatted string containing the parsed response object for
+             each received line.
     """
     logging.debug(f"Sending request payload to {api_endpoint}: {json.dumps(request_payload, indent=2)}")
 
     with requests.post(api_endpoint, headers=headers, json=request_payload, stream=True) as response:
         for line in response.iter_lines():
-            if line:
-                logging.debug(f"Received raw line: {line}")
-                for chunk in parse_response_line(line):
-                    if chunk:
-                        logging.debug(f"Yielding chunk: {chunk}")
-                        yield json.dumps(chunk) + "\n"
+            parsed_response = parse_response_line(line)
+            if parsed_response:
+                yield json.dumps(parsed_response) + "\n"
 
 
 def handle_streaming_response(api_endpoint, request_payload, headers):
@@ -260,6 +292,20 @@ def handle_non_streaming_response(api_endpoint, request_payload, headers):
 
 @app.post("/api/chat")
 async def chat(request: Request):
+    """
+    Handles the chat endpoint of the API. This function processes the incoming request payload, validates required
+    fields, and routes the request to the appropriate response handler depending on the `stream` parameter.
+    It communicates with an external service using the provided model and messages.
+
+    Args:
+        request (Request): The incoming HTTP POST request.
+
+    Raises:
+        ValueError: If the required 'messages' field is not provided in the request payload.
+
+    Returns:
+        JSONResponse: A JSON response containing either the result from the external service or an error message.
+    """
     data = await request.json()
     model = data.get("model")
     messages = data.get("messages")
@@ -291,11 +337,25 @@ async def chat(request: Request):
         "model": model,
         "messages": messages,
         "stream": stream,
-        "max_tokens": 2048,
+        # TODO Additional parameters yet ignored and to be tested
+        # https://api-docs.deepseek.com/api/create-chat-completion
+        # "frequency_penalty": os.0,
+        # "max_tokens": 2048,
+        # "presence_penalty": 0,
+        # "response_format": {
+        #     "type": "text"
+        # },
+        # "stop": None,
+        # "stream_options": None,
+        # "temperature": 1,
+        # "top_p": 1,
+        # "tools": None,
+        # "tool_choice": "none",
+        # "logprobs": False,
+        # "top_logprobs": None,
     }
     logging.debug(json.dumps(request_payload, indent=2))
     headers = {"Authorization": f"Bearer {API_KEY}", "Content-Type": JSON_MEDIA_TYPE}
-
     return (
         handle_streaming_response(api_endpoint, request_payload, headers)
         if stream
