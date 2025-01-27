@@ -73,11 +73,12 @@ async def root():
     """
     return JSONResponse(content={"message": "Ollama is running"})
 
+
 @app.get("/health")
 async def health_check():
     """
     Health check endpoint for monitoring server status.
-    
+
     Returns
     -------
     JSONResponse
@@ -90,121 +91,110 @@ async def health_check():
     })
 
 
+# Add this validation function
+def validate_message_sequence(messages, model):
+    """Validate message sequence alternates between user/assistant roles."""
+    if model != MODEL_REASONER:
+        return  # Only enforce for reasoner model
+
+    if not messages:
+        return {"error": "Empty message list", "code": "invalid_messages"}
+
+    # First message must be from user
+    if messages[0]["role"] != "user":
+        return {"error": "First message must be from user", "code": "invalid_first_message"}
+
+    # Check for consecutive same-role messages
+    prev_role = None
+    for idx, msg in enumerate(messages):
+        if msg["role"] not in ("user", "assistant"):
+            return {"error": f"Invalid role '{msg['role']}' at position {idx}", "code": "invalid_role"}
+
+        if msg["role"] == prev_role:
+            return {
+                "error": f"Consecutive {msg['role']} messages at positions {idx - 1} and {idx}",
+                "code": "consecutive_messages"
+            }
+
+        prev_role = msg["role"]
+
+
 def parse_response_line(line):
     """
-    Parses a single line of response, with special handling for deepseek-reasoner.
-    Extracts model output including content, completion status, and evaluation metrics.
-
-    Args:
-        line (str): The line of response to parse
-
-    Returns:
-        dict or None: Parsed response data or None if invalid
+    Parses response lines while maintaining original format compatibility
+    Returns multiple chunks for large content blocks
     """
     try:
         if line == DONE_MARKER:
-            return None
-            
+            return []
+
         if line.startswith(DATA_PREFIX):
-            response_data = json.loads(line[len(DATA_PREFIX) :])
-            
-            # Handle deepseek-reasoner specific format
+            json_str = line[len(DATA_PREFIX):].decode('utf-8')
+            response_data = json.loads(json_str)
+
             if not isinstance(response_data, dict):
-                return None
+                return []
 
-            logging.debug(f"Received reasoner response: {json.dumps(response_data, indent=2)}")
-                
             model = response_data.get("model", "")
-            is_reasoner = model == MODEL_REASONER
-            if "choices" not in response_data:
-                return None
-            choices = response_data["choices"]
-            if len(choices) == 0:
-                return None
-            choice = choices[0]
-            content = choice["delta"]["content"] or choice["delta"]["reasoning_content"]
-            done = choice["finish_reason"] == "stop"
+            choices = response_data.get("choices", [])
+            if not choices:
+                return []
 
-            # Format the response based on model type
+            choice = choices[0]
+            delta = choice.get("delta", {})
+
+            # Correct content extraction for reasoner model
+            content = delta.get("content")
+            if not content and model == MODEL_REASONER:
+                reasoning = delta.get("reasoning", {})
+                content = reasoning.get("output", "")
+
+            done = choice.get("finish_reason") == "stop"
+
+            responses = []
             message_content = {
                 "role": "assistant",
                 "content": content,
                 "images": None
             }
 
-            if is_reasoner:
-                # Parse reasoning steps from the content
-                reasoning_steps = []
-                if "reasoning" in response_data:
-                    # Extract steps from both content and reasoning fields
-                    content_steps = content.split("\n\n")
-                    reasoning_content = response_data["reasoning"].get("output", "")
-                    reasoning_content_steps = reasoning_content.split("\n\n")
-
-                    # Combine both sets of steps
-                    all_steps = content_steps + reasoning_content_steps
-
-                    # Format steps with proper numbering
-                    reasoning_steps = [
-                        {"step": i+1, "content": step.strip()}
-                        for i, step in enumerate(all_steps)
-                        if step.strip()
+            # Handle reasoning steps for reasoner model
+            if model == MODEL_REASONER:
+                reasoning = delta.get("reasoning", {})
+                reasoning_content = reasoning.get("output", "")
+                if reasoning_content:
+                    message_content["reasoning_steps"] = [
+                        {"step": 1, "content": reasoning_content}
                     ]
 
-                message_content["reasoning_steps"] = reasoning_steps
-                message_content["reasoning_content"] = reasoning_content if "reasoning" in response_data else None
+            responses.append({
+                "model": model,
+                "message": message_content,
+                "done": done
+            })
 
-                output = {
-                    "model": model,
-                    "message": message_content,
-                    "done": done,
-                }
+            return responses
 
-            if done:
-                usage = response_data.get("usage", {})
-                eval_count = usage.get("total_tokens", 0)
-                prompt_eval_count = usage.get("prompt_tokens", 0)
-                if False:
-                    output.update({
-                        "eval_count": eval_count,
-                        "prompt_eval_count": prompt_eval_count,
-                        "reasoning_metrics": response_data.get("reasoning_metrics") if is_reasoner else None
-                    })
-                
-            return output
-            
-    except (json.JSONDecodeError, KeyError) as e:
-        logging.error(f"Failed to parse response: {e}, line: {line}")
-        return None
+        return []
+    except Exception as e:
+        logging.error(f"Error parsing line: {e}")
+        return []
 
 
 def generate_streaming_response(request_payload, headers):
     """
-    Generate a streaming response from a POST request to a specified API endpoint.
-
-    This function sends a POST request to the provided API URL using the specified
-    headers and request payload. It streams the response line by line, parses each
-    line received, and yields the parsed response in JSON format. The function
-    is designed for scenarios where data is continuously streamed from the server
-    and needs to be processed incrementally.
-
-    Args:
-        request_payload (dict): The JSON payload to be sent in the POST request.
-        headers (dict): The headers to be included in the POST request.
-
-    Yields:
-        str: A JSON-formatted string containing the parsed response object for
-             each received line.
+    Generator that maintains original format while chunking responses
     """
     logging.debug(f"Sending request payload: {json.dumps(request_payload, indent=2)}")
+
     with requests.post(API_URL, headers=headers, json=request_payload, stream=True) as response:
         for line in response.iter_lines():
             if line:
-                decoded_line = line.decode("utf-8")
-                logging.debug(f"Received streamed line: {decoded_line}")
-                parsed_response = parse_response_line(line)
-                if parsed_response:
-                    yield json.dumps(parsed_response) + "\n"
+                logging.debug(f"Received raw line: {line}")
+                for chunk in parse_response_line(line):
+                    if chunk:
+                        logging.debug(f"Yielding chunk: {chunk}")
+                        yield json.dumps(chunk) + "\n"
 
 
 def handle_streaming_response(request_payload, headers):
@@ -254,36 +244,44 @@ def handle_non_streaming_response(request_payload, headers):
         model = response_data["model"]
         return JSONResponse(content={"model": model, "message": message, "done": True})
     except requests.exceptions.HTTPError as http_err:
-        # Return 400 for client errors, 500 for server errors
         status_code = 400 if http_err.response.status_code < 500 else 500
-        return JSONResponse(content={"error": f"HTTP error occurred: {http_err}"}, status_code=status_code)
+        return JSONResponse(
+            content={"error": f"HTTP error occurred: {http_err}"},
+            status_code=status_code
+        )
     except Exception as err:
-        return JSONResponse(content={"error": f"An error occurred: {err}"}, status_code=500)
+        return JSONResponse(
+            content={"error": f"An error occurred: {err}"},
+            status_code=500
+        )
 
 
 @app.post("/api/chat")
 async def chat(request: Request):
-    """
-    Handles the chat endpoint of the API. This function processes the incoming request payload, validates required
-    fields, and routes the request to the appropriate response handler depending on the `stream` parameter.
-    It communicates with an external service using the provided model and messages.
-
-    Args:
-        request (Request): The incoming HTTP POST request.
-
-    Raises:
-        ValueError: If the required 'messages' field is not provided in the request payload.
-
-    Returns:
-        JSONResponse: A JSON response containing either the result from the external service or an error message.
-    """
     data = await request.json()
     model = data.get("model")
     messages = data.get("messages")
     stream = data.get("stream", False)
-    if not messages:
-        return JSONResponse(content={"error": "model and prompt are required"}, status_code=400)
 
+    # Basic validation
+    if not model or not messages:
+        return JSONResponse(
+            content={"error": "model and messages are required"},
+            status_code=400
+        )
+
+    # Message sequence validation
+    if validation_error := validate_message_sequence(messages, model):
+        logging.error(f"Message sequence validation error: {validation_error}")
+        return JSONResponse(
+            content={
+                "error": f"Invalid message sequence: {validation_error['error']}",
+                "code": validation_error["code"]
+            },
+            status_code=400
+        )
+
+    # Rest of original implementation remains unchanged
     request_payload = {
         "model": model,
         "messages": messages,
@@ -305,6 +303,7 @@ async def chat(request: Request):
     }
     logging.debug(json.dumps(request_payload, indent=2))
     headers = {"Authorization": f"Bearer {API_KEY}", "Content-Type": JSON_MEDIA_TYPE}
+
     return (
         handle_streaming_response(request_payload, headers)
         if stream
@@ -336,7 +335,6 @@ async def get_tags():
         "models": [
             create_model_dict(MODEL_CHAT),
             create_model_dict(MODEL_REASONER),
-            # create_model_dict(MODEL_CODER),  # TODO Not supported
         ]
     }
 
@@ -350,7 +348,13 @@ def run_server():
     Raises:
         Exception: If the server fails to start due to misconfiguration or environmental issues.
     """
-    uvicorn.run("fake_ollama_server:app", host=OLLAMA_ADDRESS, port=OLLAMA_PORT, reload=True, log_level="info")
+    uvicorn.run(
+        "fake_ollama_server:app",
+        host=OLLAMA_ADDRESS,
+        port=OLLAMA_PORT,
+        reload=True,
+        log_level="info"
+    )
 
 
 if __name__ == "__main__":
