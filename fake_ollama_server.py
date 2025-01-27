@@ -29,14 +29,19 @@ start_time = time.time()
 OLLAMA_ADDRESS = os.getenv("OLLAMA_ADDRESS", "127.0.0.1")
 OLLAMA_PORT = int(os.getenv("OLLAMA_PORT", "11434"))
 
-API_URL = os.getenv("API_URL", "https://api.deepseek.com/v1/chat/completions")
 API_KEY = os.getenv("API_KEY")  # Retrieve the API key from the environment variable
 if not API_KEY:
     raise ValueError("API_KEY environment variable is required")
 
 MODEL_CHAT = "deepseek-chat"
-MODEL_CODER = "deepseek-coder"
 MODEL_REASONER = "deepseek-reasoner"
+
+# Add this endpoint mapping at the top with other model constants
+MODEL_ENDPOINTS = {
+    MODEL_CHAT: "https://api.deepseek.com/v1/chat/completions",
+    MODEL_REASONER: "https://api.deepseek.com/chat/completions"
+}
+
 MODEL_METADATA = {
     "modified_at": "2024-03-15T10:00:00Z",
     "size": 12000000000,
@@ -145,38 +150,32 @@ def parse_response_line(line):
 
             choice = choices[0]
             delta = choice.get("delta", {})
+            content = delta.get("content", "")
 
-            # Correct content extraction for reasoner model
-            content = delta.get("content")
-            if not content and model == MODEL_REASONER:
+            # Handle reasoning steps for reasoner model
+            reasoning_steps = []
+            if model == MODEL_REASONER:
                 reasoning = delta.get("reasoning", {})
-                content = reasoning.get("output", "")
+                reasoning_content = reasoning.get("output", "")
+                if reasoning_content:
+                    reasoning_steps.append({"step": 1, "content": reasoning_content})
 
             done = choice.get("finish_reason") == "stop"
 
-            responses = []
             message_content = {
                 "role": "assistant",
                 "content": content,
                 "images": None
             }
 
-            # Handle reasoning steps for reasoner model
-            if model == MODEL_REASONER:
-                reasoning = delta.get("reasoning", {})
-                reasoning_content = reasoning.get("output", "")
-                if reasoning_content:
-                    message_content["reasoning_steps"] = [
-                        {"step": 1, "content": reasoning_content}
-                    ]
+            if reasoning_steps:
+                message_content["reasoning_steps"] = reasoning_steps
 
-            responses.append({
+            return [{
                 "model": model,
                 "message": message_content,
                 "done": done
-            })
-
-            return responses
+            }]
 
         return []
     except Exception as e:
@@ -184,13 +183,13 @@ def parse_response_line(line):
         return []
 
 
-def generate_streaming_response(request_payload, headers):
+def generate_streaming_response(api_endpoint, request_payload, headers):
     """
     Generator that maintains original format while chunking responses
     """
-    logging.debug(f"Sending request payload: {json.dumps(request_payload, indent=2)}")
+    logging.debug(f"Sending request payload to {api_endpoint}: {json.dumps(request_payload, indent=2)}")
 
-    with requests.post(API_URL, headers=headers, json=request_payload, stream=True) as response:
+    with requests.post(api_endpoint, headers=headers, json=request_payload, stream=True) as response:
         for line in response.iter_lines():
             if line:
                 logging.debug(f"Received raw line: {line}")
@@ -200,7 +199,7 @@ def generate_streaming_response(request_payload, headers):
                         yield json.dumps(chunk) + "\n"
 
 
-def handle_streaming_response(request_payload, headers):
+def handle_streaming_response(api_endpoint, request_payload, headers):
     """
     Handles the creation of a streaming response using the provided request payload
     and headers. This function prepares a StreamingResponse object with a generator
@@ -215,10 +214,10 @@ def handle_streaming_response(request_payload, headers):
         StreamingResponse: An HTTP streaming response object with a specified
         JSON media type.
     """
-    return StreamingResponse(generate_streaming_response(request_payload, headers), media_type=JSON_MEDIA_TYPE)
+    return StreamingResponse(generate_streaming_response(api_endpoint, request_payload, headers), media_type=JSON_MEDIA_TYPE)
 
 
-def handle_non_streaming_response(request_payload, headers):
+def handle_non_streaming_response(api_endpoint, request_payload, headers):
     """
     Handles non-streaming response for a given request payload by making an API POST
     request. The function processes the API response and returns a structured JSON
@@ -240,7 +239,7 @@ def handle_non_streaming_response(request_payload, headers):
         from the API, or error details if an exception is encountered.
     """
     try:
-        response = requests.post(API_URL, headers=headers, json=request_payload)
+        response = requests.post(api_endpoint, headers=headers, json=request_payload)
         response.raise_for_status()
         response_data = response.json()
         message = response_data["choices"][0]["message"]
@@ -273,6 +272,9 @@ async def chat(request: Request):
             status_code=400
         )
 
+    # Get endpoint from mapping
+    api_endpoint = MODEL_ENDPOINTS[model]
+
     # Message sequence validation
     if validation_error := validate_message_sequence(messages, model):
         logging.error(f"Message sequence validation error: {model}\n{validation_error}\n{messages}")
@@ -289,28 +291,15 @@ async def chat(request: Request):
         "model": model,
         "messages": messages,
         "stream": stream,
-        "frequency_penalty": 0.5,
         "max_tokens": 2048,
-        "presence_penalty": 0.5,
-        "temperature": 0.7,
-        "top_p": 0.9,
-        "response_format": {
-            "type": "text"
-        },
-        "stop": None,
-        "stream_options": None,
-        "tools": None,
-        "tool_choice": "none",
-        "logprobs": False,
-        "top_logprobs": None,
     }
     logging.debug(json.dumps(request_payload, indent=2))
     headers = {"Authorization": f"Bearer {API_KEY}", "Content-Type": JSON_MEDIA_TYPE}
 
     return (
-        handle_streaming_response(request_payload, headers)
+        handle_streaming_response(api_endpoint, request_payload, headers)
         if stream
-        else handle_non_streaming_response(request_payload, headers)
+        else handle_non_streaming_response(api_endpoint, request_payload, headers)
     )
 
 
